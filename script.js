@@ -4,54 +4,11 @@ class NiOChatbot {
         this.sendButton = document.getElementById('sendButton');
         this.chatMessages = document.getElementById('chatMessages');
         
-        // Fixed responses for the chatbot
-        this.responses = {
-            greetings: [
-                "Hello! How can I assist you today?",
-                "Hi there! I'm NiO, ready to help!",
-                "Greetings! What can I do for you?",
-                "Welcome! How may I be of service?"
-            ],
-            help: [
-                "I'm here to help! What do you need assistance with?",
-                "I can help you with various tasks. What would you like to know?",
-                "Feel free to ask me anything! I'm here to assist.",
-                "I'm your AI assistant. How can I help you today?"
-            ],
-            weather: [
-                "I can't check real-time weather, but I'd recommend checking a weather app or website for accurate information!",
-                "For current weather conditions, please check your local weather service or weather app.",
-                "I don't have access to real-time weather data, but I can help you with other questions!"
-            ],
-            time: [
-                `The current time is ${new Date().toLocaleTimeString()}.`,
-                `It's currently ${new Date().toLocaleTimeString()}.`,
-                `Right now it's ${new Date().toLocaleTimeString()}.`
-            ],
-            date: [
-                `Today is ${new Date().toLocaleDateString()}.`,
-                `The date is ${new Date().toLocaleDateString()}.`,
-                `It's ${new Date().toLocaleDateString()} today.`
-            ],
-            thanks: [
-                "You're welcome! Is there anything else I can help you with?",
-                "Glad I could help! Let me know if you need anything else.",
-                "My pleasure! Feel free to ask if you have more questions.",
-                "You're very welcome! I'm here whenever you need assistance."
-            ],
-            goodbye: [
-                "Goodbye! Have a great day!",
-                "See you later! Take care!",
-                "Farewell! Feel free to come back anytime!",
-                "Bye! I'll be here when you need me again!"
-            ],
-            default: [
-                "I'm not sure I understand. Could you please rephrase that?",
-                "I'm still learning! Could you try asking that differently?",
-                "I don't have a specific response for that, but I'm here to help with other questions!",
-                "That's interesting! Could you ask me something else?"
-            ]
-        };
+        // Generate a unique session ID for this conversation
+        this.sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        
+        // API base URL
+        this.apiBaseUrl = window.location.origin;
         
         this.initializeEventListeners();
     }
@@ -79,7 +36,7 @@ class NiOChatbot {
         });
     }
     
-    sendMessage() {
+    async sendMessage() {
         const message = this.messageInput.value.trim();
         
         if (message === '') return;
@@ -93,69 +50,37 @@ class NiOChatbot {
         // Show typing indicator
         this.showTypingIndicator();
         
-        // Simulate bot thinking time
-        setTimeout(() => {
+        try {
+            // Send message to backend API
+            const response = await fetch(`${this.apiBaseUrl}/api/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: message,
+                    sessionId: this.sessionId
+                })
+            });
+            
+            const data = await response.json();
+            
+            // Hide typing indicator
             this.hideTypingIndicator();
-            const botResponse = this.getBotResponse(message);
-            this.addMessage(botResponse, 'bot');
-        }, 1000 + Math.random() * 1000); // Random delay between 1-2 seconds
-    }
-    
-    getBotResponse(userMessage) {
-        const message = userMessage.toLowerCase();
-        
-        // Check for greetings
-        if (message.includes('hello') || message.includes('hi') || message.includes('hey')) {
-            return this.getRandomResponse('greetings');
+            
+            if (response.ok) {
+                // Add bot response
+                this.addMessage(data.response, 'bot');
+            } else {
+                // Handle API errors
+                this.addMessage(`Sorry, I encountered an error: ${data.error}`, 'bot');
+            }
+            
+        } catch (error) {
+            console.error('Error sending message:', error);
+            this.hideTypingIndicator();
+            this.addMessage('Sorry, I\'m having trouble connecting to the server. Please try again.', 'bot');
         }
-        
-        // Check for help requests
-        if (message.includes('help') || message.includes('assist') || message.includes('support')) {
-            return this.getRandomResponse('help');
-        }
-        
-        // Check for weather questions
-        if (message.includes('weather') || message.includes('temperature') || message.includes('forecast')) {
-            return this.getRandomResponse('weather');
-        }
-        
-        // Check for time questions
-        if (message.includes('time') && !message.includes('sometime')) {
-            return this.getRandomResponse('time');
-        }
-        
-        // Check for date questions
-        if (message.includes('date') || message.includes('today') || message.includes('day')) {
-            return this.getRandomResponse('date');
-        }
-        
-        // Check for thanks
-        if (message.includes('thank') || message.includes('thanks')) {
-            return this.getRandomResponse('thanks');
-        }
-        
-        // Check for goodbye
-        if (message.includes('bye') || message.includes('goodbye') || message.includes('see you')) {
-            return this.getRandomResponse('goodbye');
-        }
-        
-        // Check for name questions
-        if (message.includes('name') || message.includes('who are you')) {
-            return "I'm NiO, your AI assistant! I'm here to help you with various tasks and questions.";
-        }
-        
-        // Check for capabilities
-        if (message.includes('can you') || message.includes('what can you') || message.includes('abilities')) {
-            return "I can help you with general questions, provide information, assist with basic tasks, and have conversations. I'm constantly learning and improving!";
-        }
-        
-        // Default response
-        return this.getRandomResponse('default');
-    }
-    
-    getRandomResponse(category) {
-        const responses = this.responses[category];
-        return responses[Math.floor(Math.random() * responses.length)];
     }
     
     addMessage(text, sender) {
