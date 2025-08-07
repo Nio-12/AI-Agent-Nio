@@ -1,7 +1,7 @@
 {
-  "name": "nio-chatbot-backend",
+  "name": "ai-chatbot-backend",
   "version": "1.0.0",
-  "description": "Backend for NiO AI Chatbot with OpenAI integration",
+  "description": "Backend for AI Chatbot with OpenAI integration",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -16,7 +16,7 @@
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": ["chatbot", "openai", "ai", "nio"],
+  "keywords": ["chatbot", "openai", "nodejs", "express"],
   "author": "",
   "license": "MIT"
 }

@@ -1,57 +1,32 @@
 const express = require('express');
 const cors = require('cors');
+const dotenv = require('dotenv');
 const OpenAI = require('openai');
-require('dotenv').config();
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3002;
 
-// Function to find available port
-function findAvailablePort(startPort) {
-    return new Promise((resolve, reject) => {
-        const net = require('net');
-        const server = net.createServer();
-        
-        server.listen(startPort, () => {
-            const { port } = server.address();
-            server.close(() => resolve(port));
-        });
-        
-        server.on('error', (err) => {
-            if (err.code === 'EADDRINUSE') {
-                resolve(findAvailablePort(startPort + 1));
-            } else {
-                reject(err);
-            }
-        });
-    });
-}
+// Initialize OpenAI
+const apiKey = process.env.OPENAI_API_KEY?.replace(/\n/g, '') || '';
+const openai = new OpenAI({
+    apiKey: apiKey,
+});
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('.')); // Serve static files from current directory
 
-// Initialize OpenAI (only if API key is provided)
-let openai;
-if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'your_openai_api_key_here') {
-    openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-    });
-} else {
-    console.warn('⚠️  OpenAI API key not configured. Please set OPENAI_API_KEY in your .env file.');
-}
+// Store conversations in memory (in production, use a database)
+const conversations = new Map();
 
-// Store conversations in memory (in production, you'd use a database)
-const conversations = {};
-
-// Helper function to get conversation history
-function getConversationHistory(sessionId) {
-    if (!conversations[sessionId]) {
-        conversations[sessionId] = [];
-    }
-    return conversations[sessionId];
-}
+// Routes
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/index.html');
+});
 
 // API endpoint to handle chat messages
 app.post('/api/chat', async (req, res) => {
@@ -62,76 +37,62 @@ app.post('/api/chat', async (req, res) => {
             return res.status(400).json({ error: 'Message is required' });
         }
 
-        // Get conversation history
-        const conversationHistory = getConversationHistory(sessionId);
-        
-        // Add user message to conversation
-        conversationHistory.push({
-            role: 'user',
-            content: message,
-            timestamp: new Date().toISOString()
-        });
+        // Get or create conversation history for this session
+        if (!conversations.has(sessionId)) {
+            conversations.set(sessionId, []);
+        }
+        const conversation = conversations.get(sessionId);
 
-        // Prepare messages for OpenAI API
+        // Add user message to conversation history
+        conversation.push({ role: 'user', content: message });
+
+        // Prepare messages for OpenAI (include system message and conversation history)
         const messages = [
             {
                 role: 'system',
-                content: `You are NiO, a helpful and friendly AI assistant. You are knowledgeable, patient, and always try to provide accurate and helpful responses. Keep your responses conversational and engaging.`
+                content: 'You are a helpful AI assistant. Be friendly, concise, and helpful in your responses.'
             },
-            ...conversationHistory.map(msg => ({
-                role: msg.role,
-                content: msg.content
-            }))
+            ...conversation
         ];
 
-        let botResponse;
-        
-        if (openai) {
-            // Call OpenAI API
-            const completion = await openai.chat.completions.create({
-                model: 'gpt-3.5-turbo',
-                messages: messages,
-                max_tokens: 500,
-                temperature: 0.7,
-            });
-            botResponse = completion.choices[0].message.content;
-        } else {
-            // Fallback response when OpenAI is not configured
-            botResponse = "I'm sorry, but I'm not currently connected to my AI service. Please configure your OpenAI API key in the .env file to enable AI-powered responses.";
-        }
-
-        // Add bot response to conversation
-        conversationHistory.push({
-            role: 'assistant',
-            content: botResponse,
-            timestamp: new Date().toISOString()
+        // Call OpenAI API
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: messages,
+            max_tokens: 150,
+            temperature: 0.7,
         });
 
-        // Keep only last 20 messages to prevent context from getting too long
-        if (conversationHistory.length > 20) {
-            conversationHistory.splice(0, conversationHistory.length - 20);
+        const botResponse = completion.choices[0].message.content;
+
+        // Add bot response to conversation history
+        conversation.push({ role: 'assistant', content: botResponse });
+
+        // Keep conversation history manageable (limit to last 20 messages)
+        if (conversation.length > 20) {
+            conversation.splice(0, conversation.length - 20);
         }
 
         res.json({
             response: botResponse,
-            sessionId: sessionId,
-            conversationLength: conversationHistory.length
+            conversation: conversation
         });
 
     } catch (error) {
-        console.error('Error processing chat request:', error);
+        console.error('Error processing chat:', error);
         
         if (error.code === 'insufficient_quota') {
-            res.status(429).json({ 
-                error: 'API quota exceeded. Please check your OpenAI account.' 
+            res.status(500).json({ 
+                error: 'OpenAI API quota exceeded. Please check your API key and billing.' 
             });
         } else if (error.code === 'invalid_api_key') {
-            res.status(401).json({ 
-                error: 'Invalid API key. Please check your OpenAI API key.' 
+            res.status(500).json({ 
+                error: 'Invalid OpenAI API key. Please check your .env file.' 
             });
         } else {
             res.status(500).json({ 
-                error: 'An error occurred while processing your request.' 
+                error: 'An error occurred while processing your request.',
+                details: error.message 
             });
         }
     }
@@ -140,20 +101,15 @@ app.post('/api/chat', async (req, res) => {
 // API endpoint to get conversation history
 app.get('/api/conversation/:sessionId', (req, res) => {
     const { sessionId } = req.params;
-    const conversation = getConversationHistory(sessionId);
+    const conversation = conversations.get(sessionId) || [];
     res.json({ conversation });
 });
 
-// API endpoint to clear conversation
+// API endpoint to clear conversation history
 app.delete('/api/conversation/:sessionId', (req, res) => {
     const { sessionId } = req.params;
-    conversations[sessionId] = [];
+    conversations.delete(sessionId);
     res.json({ message: 'Conversation cleared successfully' });
-});
-
-// Handle favicon.ico requests
-app.get('/favicon.ico', (req, res) => {
-    res.status(204).end(); // No content response
 });
 
 // Health check endpoint
@@ -161,24 +117,20 @@ app.get('/api/health', (req, res) => {
     res.json({ 
         status: 'OK', 
         timestamp: new Date().toISOString(),
-        openaiConfigured: !!process.env.OPENAI_API_KEY
+        conversationsCount: conversations.size
     });
 });
 
-// Start server with automatic port finding
-async function startServer() {
-    try {
-        const availablePort = await findAvailablePort(PORT);
-        app.listen(availablePort, () => {
-            console.log(`🚀 NiO Chatbot server running on port ${availablePort}`);
-            console.log(`🤖 OpenAI API configured: ${!!process.env.OPENAI_API_KEY}`);
-            console.log(`🌐 Frontend available at: http://localhost:${availablePort}`);
-            console.log(`📡 API endpoints available at: http://localhost:${availablePort}/api/`);
-        });
-    } catch (error) {
-        console.error('❌ Failed to start server:', error);
-        process.exit(1);
-    }
-}
-
-startServer();
+// Start server
+app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`📝 API endpoints:`);
+    console.log(`   POST /api/chat - Send a message`);
+    console.log(`   GET /api/conversation/:sessionId - Get conversation history`);
+    console.log(`   DELETE /api/conversation/:sessionId - Clear conversation`);
+    console.log(`   GET /api/health - Health check`);
+    console.log(`\n⚠️  Make sure to:`);
+    console.log(`   1. Copy env.example to .env`);
+    console.log(`   2. Add your OpenAI API key to .env`);
+    console.log(`   3. Run 'npm install' to install dependencies`);
+});
