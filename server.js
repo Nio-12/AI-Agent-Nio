@@ -6,6 +6,27 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Function to find available port
+function findAvailablePort(startPort) {
+    return new Promise((resolve, reject) => {
+        const net = require('net');
+        const server = net.createServer();
+        
+        server.listen(startPort, () => {
+            const { port } = server.address();
+            server.close(() => resolve(port));
+        });
+        
+        server.on('error', (err) => {
+            if (err.code === 'EADDRINUSE') {
+                resolve(findAvailablePort(startPort + 1));
+            } else {
+                reject(err);
+            }
+        });
+    });
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -130,6 +151,11 @@ app.delete('/api/conversation/:sessionId', (req, res) => {
     res.json({ message: 'Conversation cleared successfully' });
 });
 
+// Handle favicon.ico requests
+app.get('/favicon.ico', (req, res) => {
+    res.status(204).end(); // No content response
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
     res.json({ 
@@ -139,9 +165,20 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// Start server
-app.listen(PORT, () => {
-    console.log(`NiO Chatbot server running on port ${PORT}`);
-    console.log(`OpenAI API configured: ${!!process.env.OPENAI_API_KEY}`);
-    console.log(`Frontend available at: http://localhost:${PORT}`);
-});
+// Start server with automatic port finding
+async function startServer() {
+    try {
+        const availablePort = await findAvailablePort(PORT);
+        app.listen(availablePort, () => {
+            console.log(`🚀 NiO Chatbot server running on port ${availablePort}`);
+            console.log(`🤖 OpenAI API configured: ${!!process.env.OPENAI_API_KEY}`);
+            console.log(`🌐 Frontend available at: http://localhost:${availablePort}`);
+            console.log(`📡 API endpoints available at: http://localhost:${availablePort}/api/`);
+        });
+    } catch (error) {
+        console.error('❌ Failed to start server:', error);
+        process.exit(1);
+    }
+}
+
+startServer();
