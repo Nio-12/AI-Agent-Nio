@@ -5,9 +5,7 @@
   "main": "index.html",
   "scripts": {
     "dev": "node server.js",
-    "start": "node server.js",
-    "build": "echo 'No build step required'",
-    "vercel-build": "echo 'Vercel build completed'"
+    "start": "node server.js"
   },
   "dependencies": {
     "openai": "^4.0.0",
