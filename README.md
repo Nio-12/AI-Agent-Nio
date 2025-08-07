@@ -1,148 +1,186 @@
-# AI Chatbot with OpenAI Integration
+# MindTek AI Assistant
 
-A modern web chatbot that connects to OpenAI's API for intelligent responses. Built with HTML, CSS, JavaScript frontend and Node.js backend.
+A professional AI chatbot for lead generation and customer discovery, built with OpenAI and Supabase.
 
 ## 🚀 Features
 
-- **Real AI Responses**: Powered by OpenAI GPT-3.5-turbo
-- **Conversation Memory**: Maintains context across messages
-- **Modern UI**: Beautiful, responsive design
-- **Session Management**: Unique conversation sessions
-- **Error Handling**: Graceful error handling for API issues
-- **Typing Indicators**: Real-time typing animations
+- **AI-Powered Chat**: MindTek AI Assistant with structured conversation flow
+- **Lead Analysis**: Automatic extraction of customer information and lead quality assessment
+- **Dashboard**: Conversation management with analysis and deletion capabilities
+- **Multi-language Support**: Responds in the same language as the user
+- **Industry-Specific Recommendations**: Tailored AI solutions for different sectors
+
+## 🏗️ Architecture
+
+- **Frontend**: HTML, CSS, JavaScript
+- **Backend**: Vercel Serverless Functions
+- **AI**: OpenAI GPT-3.5-turbo
+- **Database**: Supabase (PostgreSQL)
+- **Deployment**: Vercel
 
 ## 📁 Project Structure
 
 ```
-AI-Agent-Nio/
-├── index.html          # Frontend HTML
-├── styles.css          # Frontend CSS
-├── script.js           # Frontend JavaScript
-├── server.js           # Node.js backend
-├── package.json        # Node.js dependencies
-├── env.example         # Environment variables template
-└── README.md          # This file
+├── api/                          # Vercel serverless functions
+│   ├── chat.js                   # Chat endpoint
+│   ├── conversations.js          # Get all conversations
+│   ├── conversation/[sessionId].js # Get/delete conversation
+│   ├── conversation/[sessionId]/analyze.js # Lead analysis
+│   └── health.js                 # Health check
+├── index.html                    # Main chat interface
+├── dashboard.html                # Conversation dashboard
+├── styles.css                    # Styling
+├── script.js                     # Frontend chat logic
+├── dashboard.js                  # Frontend dashboard logic
+├── vercel.json                   # Vercel configuration
+└── package.json                  # Dependencies
 ```
 
-## 🛠️ Setup Instructions
+## 🚀 Deployment
 
-### 1. Install Dependencies
+### 1. Prerequisites
 
-```bash
-npm install
-```
+- Vercel account
+- Supabase project
+- OpenAI API key
 
-### 2. Configure Environment Variables
+### 2. Environment Variables
 
-1. Copy the environment template:
-```bash
-cp env.example .env
-```
+Set these in your Vercel project settings:
 
-2. Edit `.env` and add your OpenAI API key:
 ```env
-OPENAI_API_KEY=your_actual_openai_api_key_here
-PORT=3000
+OPENAI_API_KEY=your_openai_api_key
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-### 3. Get OpenAI API Key
-
-1. Go to [OpenAI Platform](https://platform.openai.com/)
-2. Sign up or log in
-3. Navigate to API Keys section
-4. Create a new API key
-5. Copy the key and paste it in your `.env` file
-
-### 4. Start the Server
+### 3. Deploy to Vercel
 
 ```bash
-# Development mode (with auto-restart)
-npm run dev
+# Install Vercel CLI
+npm i -g vercel
 
-# Production mode
-npm start
+# Deploy
+vercel
+
+# Or connect to existing project
+vercel --prod
 ```
 
-### 5. Access the Application
+### 4. Database Setup
 
-Open your browser and go to: `http://localhost:3001`
+Create the `conversations` table in Supabase:
+
+```sql
+CREATE TABLE conversations (
+    id SERIAL PRIMARY KEY,
+    conversation_id TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    messages JSONB,
+    customerName VARCHAR(255),
+    customerEmail VARCHAR(255),
+    customerPhone VARCHAR(50),
+    customerIndustry VARCHAR(255),
+    customerProblem TEXT,
+    customerAvailability VARCHAR(255),
+    customerConsultation BOOLEAN DEFAULT FALSE,
+    specialNotes TEXT,
+    leadQuality VARCHAR(20) CHECK (leadQuality IN ('good', 'ok', 'spam')),
+    analyzed_at TIMESTAMP WITH TIME ZONE
+);
+```
+
+## 🎯 Usage
+
+### Chat Interface
+- Visit your deployed URL
+- Start a conversation with the MindTek AI Assistant
+- Follow the structured discovery process
+
+### Dashboard
+- Click "📊 Dashboard" button
+- View all conversations with timestamps
+- Analyze leads with the 🔍 button
+- Delete conversations with the 🗑️ button
 
 ## 🔧 API Endpoints
 
-- `POST /api/chat` - Send a message and get AI response
-- `GET /api/conversation/:sessionId` - Get conversation history
-- `DELETE /api/conversation/:sessionId` - Clear conversation
+- `POST /api/chat` - Send chat message
+- `GET /api/conversations` - Get all conversations
+- `GET /api/conversation/[sessionId]` - Get conversation
+- `DELETE /api/conversation/[sessionId]` - Delete conversation
+- `POST /api/conversation/[sessionId]/analyze` - Analyze lead
 - `GET /api/health` - Health check
 
-## 💾 Conversation Storage
+## 🎨 Features
 
-- Conversations are stored in memory (Map object)
-- Each session has a unique ID
-- Conversation history is limited to 20 messages
-- Sessions persist until server restart
+### MindTek AI Assistant
+- Industry-specific service recommendations
+- Structured conversation flow
+- Contact information collection
+- Lead quality assessment
 
-## 🎨 Frontend Features
+### Lead Analysis
+- Customer name, email, phone extraction
+- Industry identification
+- Problem/needs analysis
+- Consultation booking status
+- Lead quality categorization (good/ok/spam)
 
-- **Responsive Design**: Works on desktop and mobile
-- **Modern UI**: Gradient backgrounds and smooth animations
-- **Real-time Typing**: Animated typing indicators
-- **Auto-scroll**: Automatically scrolls to new messages
-- **Error Handling**: User-friendly error messages
+### Dashboard Features
+- Conversation list with timestamps
+- Real-time analysis updates
+- Lead quality badges
+- Conversation deletion
+- Detailed conversation view
 
-## 🔒 Security Notes
+## 🛠️ Development
 
-- API key is stored in `.env` file (not committed to git)
-- CORS enabled for local development
-- Input validation on both frontend and backend
-- Error messages don't expose sensitive information
+### Local Development
 
-## 🚨 Troubleshooting
+```bash
+# Install dependencies
+npm install
 
-### Common Issues:
+# Set environment variables
+cp .env.example .env
+# Edit .env with your keys
 
-1. **"Invalid API Key" Error**
-   - Check your `.env` file
-   - Verify your OpenAI API key is correct
-   - Ensure you have billing set up on OpenAI
+# Run locally
+npm run dev
+```
 
-2. **"Quota Exceeded" Error**
-   - Check your OpenAI billing
-   - Monitor your API usage
+### Environment Variables
 
-3. **Server Won't Start**
-   - Make sure all dependencies are installed: `npm install`
-       - Check if port 3001 is available
-   - Verify `.env` file exists
+Create a `.env` file:
 
-4. **Frontend Can't Connect**
-       - Ensure server is running on port 3001
-   - Check browser console for errors
-   - Verify CORS settings
+```env
+OPENAI_API_KEY=your_openai_api_key
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+```
 
-## 📝 Environment Variables
+## 📊 Lead Quality Assessment
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_API_KEY` | Your OpenAI API key | Required |
-| `PORT` | Server port | 3001 |
+The system automatically categorizes leads:
 
-## 🔄 Development
+- **Good**: Customer provided contact details
+- **OK**: Some engagement but no contact info
+- **Spam**: No meaningful engagement
 
-### Adding New Features:
+## 🔒 Security
 
-1. **Modify Frontend**: Edit `script.js`, `styles.css`, or `index.html`
-2. **Modify Backend**: Edit `server.js`
-3. **Add Dependencies**: Update `package.json`
+- CORS enabled for cross-origin requests
+- Environment variables for sensitive data
+- Input validation on all endpoints
+- Error handling for API failures
 
-### Testing:
+## 📈 Performance
 
-- Frontend: Open browser and test UI
-- Backend: Use tools like Postman or curl
-- API Health: Visit `http://localhost:3001/api/health`
-
-## 📄 License
-
-MIT License - feel free to use and modify!
+- Serverless functions for scalability
+- Conversation history limited to 20 messages
+- Efficient database queries
+- Optimized for Vercel's cold start
 
 ## 🤝 Contributing
 
@@ -152,14 +190,18 @@ MIT License - feel free to use and modify!
 4. Test thoroughly
 5. Submit a pull request
 
-## 📞 Support
+## 📄 License
 
-If you encounter issues:
-1. Check the troubleshooting section
-2. Verify your OpenAI API key
-3. Check server logs for errors
-4. Ensure all dependencies are installed
+MIT License - see LICENSE file for details
+
+## 🆘 Support
+
+For issues and questions:
+- Check the health endpoint: `/api/health`
+- Verify environment variables
+- Check Supabase connection
+- Review Vercel function logs
 
 ---
 
-**Happy Chatting! 🤖✨**
+**MindTek AI Assistant** - Professional AI consulting chatbot with lead analysis capabilities.

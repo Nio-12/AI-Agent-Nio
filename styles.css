@@ -209,13 +209,31 @@ body {
     margin-bottom: 20px;
 }
 
-@media (max-width: 600px) {
-    .chat-container {
-        width: 95%;
-        height: 90vh;
-    }
-    
-    .message-content {
-        max-width: 85%;
-    }
-}
+        .dashboard-button {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s ease;
+        }
+
+        .dashboard-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        @media (max-width: 600px) {
+            .chat-container {
+                width: 95%;
+                height: 90vh;
+            }
+            
+            .message-content {
+                max-width: 85%;
+            }
+        }

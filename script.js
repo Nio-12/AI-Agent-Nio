@@ -40,7 +40,7 @@ class Chatbot {
         
         try {
             // Send message to backend
-            const response = await fetch('http://localhost:3002/api/chat', {
+            const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -106,6 +106,11 @@ class Chatbot {
     scrollToBottom() {
         this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
     }
+}
+
+// Global function to go to dashboard
+function goToDashboard() {
+    window.location.href = 'dashboard.html';
 }
 
 // Initialize the chatbot when the page loads

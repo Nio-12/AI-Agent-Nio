@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "functions": {
+    "api/chat.js": {
+      "maxDuration": 30
+    },
+    "api/conversations.js": {
+      "maxDuration": 10
+    },
+    "api/conversation/[sessionId].js": {
+      "maxDuration": 10
+    },
+    "api/conversation/[sessionId]/analyze.js": {
+      "maxDuration": 30
+    },
+    "api/health.js": {
+      "maxDuration": 5
+    }
+  },
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}
