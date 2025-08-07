@@ -1,389 +1,490 @@
+// Dashboard functionality with performance optimizations
 class Dashboard {
     constructor() {
-        this.conversationsList = document.getElementById('conversationsList');
-        this.conversationDetail = document.getElementById('conversationDetail');
         this.conversations = [];
-        this.selectedConversation = null;
+        this.currentConversation = null;
+        this.isLoading = false;
+        this.debounceTimer = null;
+        this.observer = null;
         
         this.init();
     }
-    
+
     init() {
+        this.setupEventListeners();
         this.loadConversations();
+        this.setupIntersectionObserver();
     }
-    
+
+    setupEventListeners() {
+        // Use event delegation for better performance
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('conversation-content')) {
+                this.handleConversationClick(e.target.closest('.conversation-item'));
+            } else if (e.target.classList.contains('delete-button')) {
+                this.handleDeleteClick(e.target);
+            } else if (e.target.classList.contains('analyze-button')) {
+                this.handleAnalyzeClick(e.target);
+            } else if (e.target.classList.contains('refresh-button')) {
+                this.handleRefreshClick();
+            }
+        });
+
+        // Debounced search
+        const searchInput = document.querySelector('#searchInput');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                clearTimeout(this.debounceTimer);
+                this.debounceTimer = setTimeout(() => {
+                    this.filterConversations(e.target.value);
+                }, 300);
+            });
+        }
+    }
+
+    setupIntersectionObserver() {
+        // Lazy load conversations when they come into view
+        this.observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const item = entry.target;
+                    if (item.dataset.loaded !== 'true') {
+                        this.loadConversationDetails(item);
+                    }
+                }
+            });
+        }, {
+            root: document.querySelector('.conversations-list'),
+            rootMargin: '50px',
+            threshold: 0.1
+        });
+    }
+
     async loadConversations() {
+        if (this.isLoading) return;
+        
+        this.isLoading = true;
+        this.showLoadingState();
+
         try {
             const response = await fetch('/api/conversations');
-            const data = await response.json();
+            if (!response.ok) throw new Error('Failed to load conversations');
             
-            if (response.ok) {
-                this.conversations = data.conversations;
-                this.renderConversationsList();
-            } else {
-                this.showError('Failed to load conversations: ' + data.error);
-            }
+            this.conversations = await response.json();
+            this.renderConversations();
         } catch (error) {
             console.error('Error loading conversations:', error);
-            this.showError('Failed to connect to server');
-        }
-    }
-    
-    renderConversationsList() {
-        if (this.conversations.length === 0) {
-            this.conversationsList.innerHTML = `
-                <div class="empty-state">
-                    <h3>No Conversations Found</h3>
-                    <p>Start chatting to see conversations here</p>
-                    <button class="refresh-button" onclick="dashboard.loadConversations()">Refresh</button>
-                </div>
-            `;
-            return;
-        }
-        
-        // Sort conversations by created_at (newest first)
-        const sortedConversations = this.conversations.sort((a, b) => 
-            new Date(b.created_at) - new Date(a.created_at)
-        );
-        
-        this.conversationsList.innerHTML = sortedConversations.map(conv => {
-            const timestamp = new Date(conv.created_at).toLocaleString();
-            const preview = this.getConversationPreview(conv.messages);
-            
-            const hasAnalysis = conv.leadQuality ? 'analyzed' : '';
-            const analysisStatus = conv.leadQuality ? 
-                `<span class="analysis-status ${conv.leadQuality}">${conv.leadQuality}</span>` : '';
-            
-            return `
-                <div class="conversation-item ${hasAnalysis}">
-                    <div class="conversation-content" onclick="dashboard.selectConversation('${conv.conversation_id}')">
-                        <div class="conversation-id">${conv.conversation_id}</div>
-                        <div class="conversation-time">${timestamp}</div>
-                        <div class="conversation-preview">${preview}</div>
-                        ${analysisStatus}
-                    </div>
-                    <div class="conversation-actions">
-                        <button class="analyze-button" onclick="dashboard.analyzeConversation('${conv.conversation_id}', event)" title="Analyze Lead">
-                            🔍
-                        </button>
-                        <button class="delete-button" onclick="dashboard.deleteConversation('${conv.conversation_id}', event)" title="Delete">
-                            🗑️
-                        </button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
-    
-    getConversationPreview(messages) {
-        if (!messages || messages.length === 0) {
-            return 'No messages';
-        }
-        
-        // Get the first user message as preview
-        const firstUserMessage = messages.find(msg => msg.role === 'user');
-        if (firstUserMessage) {
-            return firstUserMessage.content.substring(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '');
-        }
-        
-        return 'Conversation started';
-    }
-    
-    async selectConversation(conversationId) {
-        try {
-            // Update active state
-            document.querySelectorAll('.conversation-item').forEach(item => {
-                item.classList.remove('active');
-            });
-            
-            const selectedItem = Array.from(document.querySelectorAll('.conversation-item'))
-                .find(item => item.querySelector('.conversation-id').textContent === conversationId);
-            
-            if (selectedItem) {
-                selectedItem.classList.add('active');
-            }
-            
-            // Load conversation details
-            const response = await fetch(`/api/conversation/${conversationId}`);
-            const data = await response.json();
-            
-            if (response.ok) {
-                this.selectedConversation = {
-                    conversation_id: conversationId,
-                    messages: data.conversation
-                };
-                this.renderConversationDetail();
-            } else {
-                this.showError('Failed to load conversation: ' + data.error);
-            }
-        } catch (error) {
-            console.error('Error selecting conversation:', error);
-            this.showError('Failed to load conversation details');
-        }
-    }
-    
-    renderConversationDetail() {
-        if (!this.selectedConversation) {
-            this.conversationDetail.innerHTML = `
-                <div class="no-conversation">
-                    Select a conversation to view details
-                </div>
-            `;
-            return;
-        }
-        
-        const conversation = this.selectedConversation;
-        const timestamp = new Date(conversation.created_at || Date.now()).toLocaleString();
-        
-        // Check if analysis exists using new columns
-        const hasAnalysis = conversation.leadQuality || conversation.customerName;
-        const analysisSection = hasAnalysis ? this.renderAnalysisSection(conversation) : '';
-        const analysisTimestamp = conversation.analyzed_at ? 
-            `<p class="analysis-timestamp">Analyzed: ${new Date(conversation.analyzed_at).toLocaleString()}</p>` : '';
-        
-        this.conversationDetail.innerHTML = `
-            <div class="detail-header">
-                <h3>Conversation: ${conversation.conversation_id}</h3>
-                <p>Created: ${timestamp} | Messages: ${conversation.messages.length}</p>
-                ${analysisTimestamp}
-            </div>
-            ${analysisSection}
-            <div class="messages-container">
-                ${this.renderMessages(conversation.messages)}
-            </div>
-        `;
-    }
-    
-    renderAnalysisSection(conversation) {
-        const qualityColor = {
-            'good': '#28a745',
-            'ok': '#ffc107',
-            'spam': '#dc3545'
-        };
-        
-        return `
-            <div class="analysis-section">
-                <h4>Lead Analysis</h4>
-                <div class="analysis-grid">
-                    <div class="analysis-item">
-                        <label>Name:</label>
-                        <span>${conversation.customerName || 'Not provided'}</span>
-                    </div>
-                    <div class="analysis-item">
-                        <label>Email:</label>
-                        <span>${conversation.customerEmail || 'Not provided'}</span>
-                    </div>
-                    <div class="analysis-item">
-                        <label>Phone:</label>
-                        <span>${conversation.customerPhone || 'Not provided'}</span>
-                    </div>
-                    <div class="analysis-item">
-                        <label>Industry:</label>
-                        <span>${conversation.customerIndustry || 'Not specified'}</span>
-                    </div>
-                    <div class="analysis-item full-width">
-                        <label>Problems/Needs:</label>
-                        <span>${conversation.customerProblem || 'Not specified'}</span>
-                    </div>
-                    <div class="analysis-item">
-                        <label>Availability:</label>
-                        <span>${conversation.customerAvailability || 'Not specified'}</span>
-                    </div>
-                    <div class="analysis-item">
-                        <label>Consultation Booked:</label>
-                        <span>${conversation.customerConsultation ? 'Yes' : 'No'}</span>
-                    </div>
-                    <div class="analysis-item">
-                        <label>Lead Quality:</label>
-                        <span class="quality-badge" style="background-color: ${qualityColor[conversation.leadQuality] || '#6c757d'}">
-                            ${(conversation.leadQuality || 'unknown').toUpperCase()}
-                        </span>
-                    </div>
-                    ${conversation.specialNotes ? `
-                        <div class="analysis-item full-width">
-                            <label>Special Notes:</label>
-                            <span>${conversation.specialNotes}</span>
-                        </div>
-                    ` : ''}
-                </div>
-            </div>
-        `;
-    }
-    
-    renderMessages(messages) {
-        if (!messages || messages.length === 0) {
-            return '<div class="empty-state"><p>No messages in this conversation</p></div>';
-        }
-        
-        return messages.map((message, index) => {
-            const isUser = message.role === 'user';
-            const timestamp = new Date().toLocaleTimeString(); // You could add timestamps to messages if needed
-            
-            return `
-                <div class="message ${isUser ? 'user' : 'bot'}">
-                    <div class="message-avatar">
-                        ${isUser ? 'U' : 'AI'}
-                    </div>
-                    <div class="message-content">
-                        ${message.content}
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
-    
-    async analyzeConversation(conversationId, event) {
-        // Prevent event bubbling to avoid selecting the conversation
-        event.stopPropagation();
-        
-        // Show loading state
-        const analyzeButton = event.target;
-        const originalText = analyzeButton.textContent;
-        analyzeButton.textContent = '⏳';
-        analyzeButton.disabled = true;
-        
-        try {
-            const response = await fetch(`/api/conversation/${conversationId}/analyze`, {
-                method: 'POST'
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
-                // Update local conversation with analysis
-                const conversationIndex = this.conversations.findIndex(conv => conv.conversation_id === conversationId);
-                if (conversationIndex !== -1) {
-                    // Update with new column values
-                    this.conversations[conversationIndex].customerName = data.analysis.customerName;
-                    this.conversations[conversationIndex].customerEmail = data.analysis.customerEmail;
-                    this.conversations[conversationIndex].customerPhone = data.analysis.customerPhone;
-                    this.conversations[conversationIndex].customerIndustry = data.analysis.customerIndustry;
-                    this.conversations[conversationIndex].customerProblem = data.analysis.customerProblem;
-                    this.conversations[conversationIndex].customerAvailability = data.analysis.customerAvailability;
-                    this.conversations[conversationIndex].customerConsultation = data.analysis.customerConsultation;
-                    this.conversations[conversationIndex].specialNotes = data.analysis.specialNotes;
-                    this.conversations[conversationIndex].leadQuality = data.analysis.leadQuality;
-                    this.conversations[conversationIndex].analyzed_at = data.analyzed_at;
-                }
-                
-                // Re-render the list to show analysis status
-                this.renderConversationsList();
-                
-                // If this conversation is currently selected, update the detail view
-                if (this.selectedConversation && this.selectedConversation.conversation_id === conversationId) {
-                    // Update with new column values
-                    this.selectedConversation.customerName = data.analysis.customerName;
-                    this.selectedConversation.customerEmail = data.analysis.customerEmail;
-                    this.selectedConversation.customerPhone = data.analysis.customerPhone;
-                    this.selectedConversation.customerIndustry = data.analysis.customerIndustry;
-                    this.selectedConversation.customerProblem = data.analysis.customerProblem;
-                    this.selectedConversation.customerAvailability = data.analysis.customerAvailability;
-                    this.selectedConversation.customerConsultation = data.analysis.customerConsultation;
-                    this.selectedConversation.specialNotes = data.analysis.specialNotes;
-                    this.selectedConversation.leadQuality = data.analysis.leadQuality;
-                    this.renderConversationDetail();
-                }
-                
-                // Show success message
-                this.showSuccessMessage('Lead analysis completed successfully');
-            } else {
-                const errorData = await response.json();
-                this.showError('Failed to analyze conversation: ' + errorData.error);
-            }
-        } catch (error) {
-            console.error('Error analyzing conversation:', error);
-            this.showError('Failed to analyze conversation');
+            this.showErrorState();
         } finally {
-            // Restore button state
-            analyzeButton.textContent = originalText;
-            analyzeButton.disabled = false;
+            this.isLoading = false;
+            this.hideLoadingState();
         }
     }
-    
-    async deleteConversation(conversationId, event) {
-        // Prevent event bubbling to avoid selecting the conversation
-        event.stopPropagation();
+
+    renderConversations() {
+        const container = document.getElementById('conversationsList');
+        if (!container) return;
+
+        // Use DocumentFragment for better performance
+        const fragment = document.createDocumentFragment();
         
-        // Show confirmation dialog
-        if (!confirm(`Are you sure you want to delete conversation "${conversationId}"? This action cannot be undone.`)) {
-            return;
+        if (this.conversations.length === 0) {
+            fragment.appendChild(this.createEmptyState());
+        } else {
+            this.conversations.forEach(conversation => {
+                const element = this.createConversationElement(conversation);
+                fragment.appendChild(element);
+            });
+        }
+
+        // Clear and append in one operation
+        container.innerHTML = '';
+        container.appendChild(fragment);
+    }
+
+    createConversationElement(conversation) {
+        const div = document.createElement('div');
+        div.className = 'conversation-item';
+        div.dataset.id = conversation.id;
+        div.dataset.loaded = 'false';
+        
+        const timestamp = new Date(conversation.created_at).toLocaleString();
+        const preview = this.getConversationPreview(conversation.messages);
+        
+        div.innerHTML = `
+            <div class="conversation-content">
+                <div class="conversation-id">${conversation.conversation_id}</div>
+                <div class="conversation-time">${timestamp}</div>
+                <div class="conversation-preview">${preview}</div>
+            </div>
+            <div class="conversation-actions">
+                <button class="analyze-button" title="Analyze conversation">📊</button>
+                <button class="delete-button" title="Delete conversation">🗑️</button>
+            </div>
+        `;
+
+        // Observe for lazy loading
+        this.observer.observe(div);
+        
+        return div;
+    }
+
+    getConversationPreview(messages) {
+        if (!messages || messages.length === 0) return 'No messages';
+        
+        const firstMessage = messages[0];
+        const text = firstMessage.content || firstMessage.text || '';
+        return text.length > 50 ? text.substring(0, 50) + '...' : text;
+    }
+
+    async loadConversationDetails(element) {
+        const conversationId = element.dataset.id;
+        if (!conversationId) return;
+
+        try {
+            const response = await fetch(`/api/conversation/${conversationId}`);
+            if (!response.ok) throw new Error('Failed to load conversation details');
+            
+            const conversation = await response.json();
+            element.dataset.loaded = 'true';
+            this.observer.unobserve(element);
+            
+            // Store conversation data for later use
+            element.dataset.conversation = JSON.stringify(conversation);
+        } catch (error) {
+            console.error('Error loading conversation details:', error);
+        }
+    }
+
+    handleConversationClick(element) {
+        if (!element) return;
+
+        // Remove active class from all items
+        document.querySelectorAll('.conversation-item').forEach(item => {
+            item.classList.remove('active');
+        });
+
+        // Add active class to clicked item
+        element.classList.add('active');
+
+        // Load conversation details if not already loaded
+        if (element.dataset.loaded !== 'true') {
+            this.loadConversationDetails(element);
+        }
+
+        // Display conversation
+        this.displayConversation(element);
+    }
+
+    displayConversation(element) {
+        const conversationData = element.dataset.conversation;
+        if (!conversationData) return;
+
+        const conversation = JSON.parse(conversationData);
+        const container = document.getElementById('conversationDetail');
+        
+        if (!container) return;
+
+        // Use DocumentFragment for better performance
+        const fragment = document.createDocumentFragment();
+        
+        // Header
+        const header = document.createElement('div');
+        header.className = 'detail-header';
+        header.innerHTML = `
+            <h3>Conversation: ${conversation.conversation_id}</h3>
+            <p>Created: ${new Date(conversation.created_at).toLocaleString()}</p>
+        `;
+        fragment.appendChild(header);
+
+        // Messages
+        const messagesContainer = document.createElement('div');
+        messagesContainer.className = 'messages-container';
+        
+        if (conversation.messages && conversation.messages.length > 0) {
+            conversation.messages.forEach(message => {
+                const messageElement = this.createMessageElement(message);
+                messagesContainer.appendChild(messageElement);
+            });
+        } else {
+            messagesContainer.innerHTML = '<p>No messages in this conversation</p>';
         }
         
+        fragment.appendChild(messagesContainer);
+
+        // Analysis section if available - preserve existing analysis
+        if (conversation.lead_analysis) {
+            const analysisSection = this.createAnalysisSection(conversation.lead_analysis);
+            fragment.appendChild(analysisSection);
+        }
+
+        // Clear and append in one operation
+        container.innerHTML = '';
+        container.appendChild(fragment);
+    }
+
+    createMessageElement(message) {
+        const div = document.createElement('div');
+        div.className = `message ${message.role || 'user'}`;
+        
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.textContent = message.role === 'assistant' ? '' : 'U';
+        
+        const content = document.createElement('div');
+        content.className = 'message-content';
+        content.textContent = message.content || message.text || '';
+        
+        div.appendChild(avatar);
+        div.appendChild(content);
+        
+        return div;
+    }
+
+    createAnalysisSection(analysis) {
+        const section = document.createElement('div');
+        section.className = 'analysis-section';
+        
+        const analysisData = typeof analysis === 'string' ? JSON.parse(analysis) : analysis;
+        
+        section.innerHTML = `
+            <h3>Lead Analysis</h3>
+            <div class="analysis-grid">
+                <div class="analysis-item">
+                    <label>Name:</label>
+                    <span class="value">${analysisData.customerName || 'N/A'}</span>
+                </div>
+                <div class="analysis-item">
+                    <label>Email:</label>
+                    <span class="value">${analysisData.customerEmail || 'N/A'}</span>
+                </div>
+                <div class="analysis-item">
+                    <label>Phone:</label>
+                    <span class="value">${analysisData.customerPhone || 'N/A'}</span>
+                </div>
+                <div class="analysis-item">
+                    <label>Industry:</label>
+                    <span class="value">${analysisData.customerIndustry || 'N/A'}</span>
+                </div>
+                <div class="analysis-item full-width">
+                    <label>Problems/Needs:</label>
+                    <span class="value">${analysisData.customerProblem || 'N/A'}</span>
+                </div>
+                <div class="analysis-item">
+                    <label>Availability:</label>
+                    <span class="value">${analysisData.customerAvailability || 'N/A'}</span>
+                </div>
+                <div class="analysis-item">
+                    <label>Consultation:</label>
+                    <span class="value">${analysisData.customerConsultation ? 'Yes' : 'No'}</span>
+                </div>
+                <div class="analysis-item full-width">
+                    <label>Special Notes:</label>
+                    <span class="value">${analysisData.specialNotes || 'N/A'}</span>
+                </div>
+            </div>
+            <div class="lead-quality ${analysisData.leadQuality}">${analysisData.leadQuality}</div>
+        `;
+        
+        return section;
+    }
+
+    async handleDeleteClick(button) {
+        const item = button.closest('.conversation-item');
+        const conversationId = item.dataset.id;
+        
+        if (!conversationId || !confirm('Are you sure you want to delete this conversation?')) {
+            return;
+        }
+
         try {
             const response = await fetch(`/api/conversation/${conversationId}`, {
                 method: 'DELETE'
             });
-            
+
             if (response.ok) {
-                // Remove from local array
-                this.conversations = this.conversations.filter(conv => conv.conversation_id !== conversationId);
-                
-                // If the deleted conversation was selected, clear the detail view
-                if (this.selectedConversation && this.selectedConversation.conversation_id === conversationId) {
-                    this.selectedConversation = null;
-                    this.renderConversationDetail();
-                }
-                
-                // Re-render the list
-                this.renderConversationsList();
-                
-                // Show success message
+                item.remove();
                 this.showSuccessMessage('Conversation deleted successfully');
+                
+                // Clear detail view if this was the active conversation
+                if (item.classList.contains('active')) {
+                    document.getElementById('conversationDetail').innerHTML = '<h2>Select a conversation to view details</h2>';
+                }
             } else {
-                const data = await response.json();
-                this.showError('Failed to delete conversation: ' + data.error);
+                throw new Error('Failed to delete conversation');
             }
         } catch (error) {
             console.error('Error deleting conversation:', error);
-            this.showError('Failed to delete conversation');
+            this.showSuccessMessage('Error deleting conversation', 'error');
         }
     }
-    
-    showSuccessMessage(message) {
-        // Create a temporary success message
-        const successDiv = document.createElement('div');
-        successDiv.className = 'success-message';
-        successDiv.textContent = message;
-        successDiv.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: #4CAF50;
-            color: white;
-            padding: 12px 20px;
-            border-radius: 8px;
-            z-index: 1000;
-            animation: slideIn 0.3s ease;
-        `;
+
+    async handleAnalyzeClick(button) {
+        const item = button.closest('.conversation-item');
+        const conversationId = item.dataset.id;
         
-        document.body.appendChild(successDiv);
-        
-        // Remove after 3 seconds
-        setTimeout(() => {
-            if (successDiv.parentNode) {
-                successDiv.parentNode.removeChild(successDiv);
+        if (!conversationId) return;
+
+        button.disabled = true;
+        button.textContent = 'Analyzing...';
+
+        try {
+            const response = await fetch(`/api/conversation/${conversationId}/analyze`, {
+                method: 'POST'
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                this.showSuccessMessage('Analysis completed successfully');
+                
+                // Reload conversation details to show analysis
+                item.dataset.loaded = 'false';
+                await this.loadConversationDetails(item);
+                
+                // If this conversation is currently selected, update the detail view
+                if (item.classList.contains('active')) {
+                    this.updateAnalysisSection(item);
+                }
+            } else {
+                throw new Error('Analysis failed');
             }
+        } catch (error) {
+            console.error('Error analyzing conversation:', error);
+            this.showSuccessMessage('Error analyzing conversation', 'error');
+        } finally {
+            button.disabled = false;
+            button.textContent = '📊';
+        }
+    }
+
+    updateAnalysisSection(element) {
+        const conversationData = element.dataset.conversation;
+        if (!conversationData) return;
+
+        const conversation = JSON.parse(conversationData);
+        const container = document.getElementById('conversationDetail');
+        
+        if (!container) return;
+
+        // Find existing analysis section
+        let existingAnalysis = container.querySelector('.analysis-section');
+        
+        if (conversation.lead_analysis) {
+            const newAnalysisSection = this.createAnalysisSection(conversation.lead_analysis);
+            
+            if (existingAnalysis) {
+                // Replace existing analysis section
+                existingAnalysis.replaceWith(newAnalysisSection);
+            } else {
+                // Add new analysis section after messages
+                const messagesContainer = container.querySelector('.messages-container');
+                if (messagesContainer) {
+                    messagesContainer.after(newAnalysisSection);
+                } else {
+                    container.appendChild(newAnalysisSection);
+                }
+            }
+        }
+    }
+
+    async handleRefreshClick() {
+        const button = document.querySelector('.refresh-button');
+        if (button) {
+            button.disabled = true;
+            const icon = button.querySelector('.refresh-icon');
+            if (icon) icon.style.animation = 'spin 1s linear infinite';
+        }
+
+        await this.loadConversations();
+
+        if (button) {
+            button.disabled = false;
+            const icon = button.querySelector('.refresh-icon');
+            if (icon) icon.style.animation = 'none';
+        }
+    }
+
+    filterConversations(searchTerm) {
+        const items = document.querySelectorAll('.conversation-item');
+        const term = searchTerm.toLowerCase();
+
+        items.forEach(item => {
+            const content = item.querySelector('.conversation-content').textContent.toLowerCase();
+            item.style.display = content.includes(term) ? 'flex' : 'none';
+        });
+    }
+
+    showLoadingState() {
+        const container = document.getElementById('conversationsList');
+        if (container) {
+            container.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Loading conversations...
+                </div>
+            `;
+        }
+    }
+
+    hideLoadingState() {
+        // Loading state is cleared when conversations are rendered
+    }
+
+    showErrorState() {
+        const container = document.getElementById('conversationsList');
+        if (container) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <h3>Error Loading Conversations</h3>
+                    <p>Failed to load conversations. Please try again.</p>
+                    <button class="refresh-button" onclick="dashboard.handleRefreshClick()">
+                        <div class="refresh-icon"></div>
+                        Retry
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    createEmptyState() {
+        const div = document.createElement('div');
+        div.className = 'empty-state';
+        div.innerHTML = `
+            <h3>No Conversations</h3>
+            <p>No conversations found. Start a chat to see conversations here.</p>
+        `;
+        return div;
+    }
+
+    showSuccessMessage(message, type = 'success') {
+        const existingMessage = document.querySelector('.success-message');
+        if (existingMessage) {
+            existingMessage.remove();
+        }
+
+        const messageElement = document.createElement('div');
+        messageElement.className = 'success-message';
+        messageElement.textContent = message;
+        
+        if (type === 'error') {
+            messageElement.style.background = 'rgba(220, 53, 69, 0.9)';
+        }
+
+        document.body.appendChild(messageElement);
+
+        setTimeout(() => {
+            messageElement.remove();
         }, 3000);
     }
-    
-    showError(message) {
-        this.conversationsList.innerHTML = `
-            <div class="empty-state">
-                <h3>Error</h3>
-                <p>${message}</p>
-                <button class="refresh-button" onclick="dashboard.loadConversations()">Retry</button>
-            </div>
-        `;
-    }
 }
 
-// Global function to go back to chat
-function goToChat() {
-    window.location.href = 'index.html';
-}
-
-// Initialize dashboard when page loads
+// Initialize dashboard when DOM is loaded
 let dashboard;
 document.addEventListener('DOMContentLoaded', () => {
     dashboard = new Dashboard();
 });
+
+// Global function for navigation
+function goToChat() {
+    window.location.href = '/';
+}
