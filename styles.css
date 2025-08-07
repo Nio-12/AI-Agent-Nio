@@ -327,13 +327,12 @@ body::before {
 
 /* Dashboard Styles - Synchronized with Chat Container */
 .dashboard-container {
-    width: 90%;
-    max-width: 1200px;
-    height: 80vh;
+    width: 100%;
+    height: 100vh;
     background: rgba(128, 128, 128, 0.1);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    border-radius: 20px;
+    border-radius: 0;
     box-shadow: 
         0 20px 40px rgba(0, 0, 0, 0.3),
         0 0 0 1px rgba(255, 255, 255, 0.1),
@@ -348,12 +347,11 @@ body::before {
 }
 
 .dashboard-container:hover {
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     box-shadow: 
         0 20px 40px rgba(0, 0, 0, 0.3),
-        0 0 0 1px rgba(255, 255, 255, 0.3),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2),
-        0 0 20px rgba(255, 255, 255, 0.2);
+        0 0 0 1px rgba(255, 255, 255, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .dashboard-header {
@@ -397,12 +395,30 @@ body::before {
 }
 
 .conversations-list {
-    width: 300px;
+    width: 500px;
     border-right: 1px solid rgba(255, 255, 255, 0.1);
     overflow-y: auto;
     background: rgba(30, 30, 30, 0.3);
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
+}
+
+.conversations-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.conversations-list::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.conversations-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+}
+
+.conversations-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
 }
 
 .conversation-item {
