@@ -70,10 +70,24 @@ class Dashboard {
             const response = await fetch('/api/conversations');
             if (!response.ok) throw new Error('Failed to load conversations');
             
-            this.conversations = await response.json();
+            const data = await response.json();
+            
+            // Handle different response formats
+            if (Array.isArray(data)) {
+                this.conversations = data;
+            } else if (data.conversations && Array.isArray(data.conversations)) {
+                this.conversations = data.conversations;
+            } else if (data.data && Array.isArray(data.data)) {
+                this.conversations = data.data;
+            } else {
+                console.warn('Unexpected response format:', data);
+                this.conversations = [];
+            }
+            
             this.renderConversations();
         } catch (error) {
             console.error('Error loading conversations:', error);
+            this.conversations = [];
             this.showErrorState();
         } finally {
             this.isLoading = false;
@@ -84,6 +98,12 @@ class Dashboard {
     renderConversations() {
         const container = document.getElementById('conversationsList');
         if (!container) return;
+
+        // Ensure conversations is always an array
+        if (!Array.isArray(this.conversations)) {
+            console.warn('Conversations is not an array:', this.conversations);
+            this.conversations = [];
+        }
 
         // Use DocumentFragment for better performance
         const fragment = document.createDocumentFragment();
